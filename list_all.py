@@ -1,3 +1,4 @@
+from state import globalMap
 def list_all(args: list[str]) -> None:
     if not globalMap.names:
         print("No saved commands.")
