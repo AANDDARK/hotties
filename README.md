@@ -2,14 +2,27 @@
 
 A tiny CLI that saves command sequences under a short name and **re-runs them automatically whenever files in the current directory change**.
 
-Think of it as a hot-reload for anything: compile and run C++, run tests, rebuild a project, lint a file. You describe the commands once, and then a single short command does the rest.
+Think of it as hot-reload for anything: compile and run C++, run tests, rebuild a project, lint a file. Describe the commands once, then a single short command does the rest.
 
 ```bash
-hotties add cpp 'g++ $1 -o out' '.\out.exe'
+hotties add cpp 'g++ $1 -o out' './out'
 hotties cpp main.cpp
 ```
 
 Edit and save `main.cpp`, and hotties compiles and runs it again.
+
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [Quick install with scripts](#quick-install-with-scripts)
+  - [Manual install](#manual-install)
+- [Usage](#usage)
+- [How it works](#how-it-works)
+- [Project structure](#project-structure)
+- [Notes and limitations](#notes-and-limitations)
+- [Updating and uninstalling](#updating-and-uninstalling)
 
 ## Features
 
@@ -24,10 +37,103 @@ Edit and save `main.cpp`, and hotties compiles and runs it again.
 ## Requirements
 
 - Python 3.10 or newer
+- `git` (only for the install scripts)
 
 ## Installation
 
-### Option 1: pipx (recommended)
+### Quick install with scripts
+
+The repository ships two installers. Both do the same three things:
+
+1. Check that `git` is available.
+2. Clone the repository (or `git pull --ff-only` if it is already cloned).
+3. Detect the project type and install it. For hotties this means creating a virtual environment at `<install dir>/.venv` and running `pip install .` inside it.
+
+| Script | Platform | Default install directory |
+| --- | --- | --- |
+| `install_unix.bash` | Linux, macOS | `~/.local/share/hotties` |
+| `install_windows.ps1` | Windows (PowerShell) | `%LOCALAPPDATA%\hotties` |
+
+Set the `INSTALL_DIR` environment variable to install somewhere else.
+
+#### Linux / macOS
+
+```bash
+curl -fsSL https://github.com/AANDDARK/hotties/raw/refs/heads/master/install_unix.bash | bash
+```
+
+Or download and inspect it first:
+
+```bash
+git clone https://github.com/AANDDARK/hotties.git
+cd hotties
+bash install_unix.bash
+```
+
+Custom location:
+
+```bash
+INSTALL_DIR="$HOME/tools/hotties" bash install_unix.bash
+```
+
+#### Windows (PowerShell)
+
+```powershell
+irm https://github.com/AANDDARK/hotties/raw/refs/heads/master/install_windows.ps1 | iex
+```
+
+Or from a local clone:
+
+```powershell
+git clone https://github.com/AANDDARK/hotties.git
+cd hotties
+.\install_windows.ps1
+```
+
+If PowerShell blocks the script, allow it for the current session only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Custom location:
+
+```powershell
+$env:INSTALL_DIR = "C:\tools\hotties"
+.\install_windows.ps1
+```
+
+#### Make `hotties` available everywhere
+
+The scripts install into a virtual environment and **do not modify your `PATH`**. After the script finishes, pick one of these:
+
+**Linux / macOS**
+
+```bash
+# Option A: symlink into a folder that is already on PATH
+mkdir -p ~/.local/bin
+ln -sf ~/.local/share/hotties/.venv/bin/hotties ~/.local/bin/hotties
+
+# Option B: add the venv's bin folder to PATH (put this line in ~/.bashrc or ~/.zshrc)
+export PATH="$HOME/.local/share/hotties/.venv/bin:$PATH"
+```
+
+**Windows (PowerShell)**
+
+```powershell
+# Add the venv's Scripts folder to your user PATH, then restart the terminal
+$scripts = Join-Path $env:LOCALAPPDATA "hotties\.venv\Scripts"
+$path = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$path;$scripts", "User")
+```
+
+#### Other project types
+
+The scripts are generic and also detect Node.js (`package.json`), Rust (`Cargo.toml`) and Go (`go.mod`) projects; the Unix script additionally runs `make install` for a `Makefile`. None of these apply to hotties itself, which is a Python project.
+
+### Manual install
+
+#### Option 1: pipx (recommended)
 
 Installs `hotties` globally, so it works in any terminal and any folder.
 
@@ -42,7 +148,7 @@ Restart the terminal, then from the project folder:
 pipx install .
 ```
 
-### Option 2: pipx in editable mode (for development)
+#### Option 2: pipx in editable mode (for development)
 
 Code changes apply immediately, with no reinstall.
 
@@ -50,7 +156,7 @@ Code changes apply immediately, with no reinstall.
 pipx install -e .
 ```
 
-### Option 3: virtual environment
+#### Option 3: virtual environment
 
 ```bash
 python -m venv .venv
@@ -75,19 +181,26 @@ If it prints `No saved commands.`, everything works.
 
 ## Usage
 
+### Commands at a glance
+
+| Command | What it does |
+| --- | --- |
+| `hotties add <name> '<cmd 1>' '<cmd 2>' ...` | Save a command sequence under `<name>` |
+| `hotties <name> [args...]` | Run the sequence, then re-run it on every file change |
+| `hotties list` | Show all saved sequences |
+| `hotties remove <name>` | Delete a saved sequence |
+
 ### Save a command
 
 ```bash
 hotties add <name> '<command 1>' '<command 2>' ...
 ```
 
-**Always wrap commands in single quotes.** Otherwise your shell replaces `$1` with an empty string before hotties even starts.
-
-Examples:
+**Always wrap commands in single quotes.** Otherwise your shell replaces `$1` with an empty string before hotties even starts. (In Windows `cmd.exe`, single quotes are not quoting characters, so use PowerShell or a POSIX-style shell such as Git Bash.)
 
 ```bash
 # C++: compile, then run
-hotties add cpp 'g++ $1 -o out' '.\out.exe'
+hotties add cpp 'g++ $1 -o out' './out'
 
 # Python: run a script
 hotties add py 'python $1'
@@ -95,6 +208,8 @@ hotties add py 'python $1'
 # Node: run tests
 hotties add test 'npm test'
 ```
+
+On Windows, run the compiled program as `.\out.exe` instead of `./out`.
 
 ### Run a saved command
 
@@ -106,13 +221,13 @@ hotties <name> [arguments...]
 hotties cpp main.cpp
 ```
 
-This runs the command sequence once, then keeps watching the current directory. When a file changes, the sequence runs again. Press `Ctrl+C` to stop.
+This runs the sequence once, then keeps watching the current directory. When a file changes, the sequence runs again. Press `Ctrl+C` to stop.
 
 Arguments map to placeholders by position: `$1` is the first argument, `$2` the second, and so on.
 
 ```bash
-hotties add copy 'copy $1 $2'
-hotties copy a.txt b.txt      # runs: copy a.txt b.txt
+hotties add copy 'cp $1 $2'
+hotties copy a.txt b.txt      # runs: cp a.txt b.txt
 ```
 
 ### List saved commands
@@ -139,17 +254,19 @@ hotties remove <name>
 
 ```
 hotties/
-├── main.py            # entry point, CLI routing
-├── state.py           # shared globalMap instance
-├── watcher.py         # file change detection
-├── list_all.py        # `hotties list`
+├── main.py              # entry point, CLI routing
+├── state.py             # shared globalMap instance
+├── watcher.py           # file change detection
+├── list_all.py          # `hotties list`
+├── install_unix.bash    # installer for Linux / macOS
+├── install_windows.ps1  # installer for Windows
 ├── model/
 │   ├── RunbleEntities.py
-│   └── RunbleMap.py   # storage, loads/saves ~/.hotties.json
+│   └── RunbleMap.py     # storage, loads/saves ~/.hotties.json
 ├── use_cases/
 │   ├── add.py
 │   ├── remove.py
-│   └── use.py         # runs commands with placeholders
+│   └── use.py           # runs commands with placeholders
 └── pyproject.toml
 ```
 
@@ -161,10 +278,31 @@ hotties/
 - Arguments with spaces are quoted with `shlex.quote`, which targets POSIX shells. On Windows, paths with spaces may need extra care.
 - Only the directory you run `hotties` from (and its subfolders) is watched.
 
-## Uninstall
+## Updating and uninstalling
+
+### Installed with the scripts
+
+**Update:** run the same install script again. It detects the existing clone and runs `git pull --ff-only`.
+
+**Uninstall:** delete the install directory and any symlink or `PATH` entry you added.
+
+```bash
+# Linux / macOS
+rm -rf ~/.local/share/hotties
+rm -f ~/.local/bin/hotties
+```
+
+```powershell
+# Windows
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\hotties"
+```
+
+### Installed with pipx
 
 ```bash
 pipx uninstall hotties
 ```
 
-Saved commands stay in `~/.hotties.json`. Delete that file to remove them.
+### Saved commands
+
+Saved commands stay in `~/.hotties.json` after uninstalling. Delete that file to remove them.
